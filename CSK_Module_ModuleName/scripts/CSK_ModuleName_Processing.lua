@@ -17,7 +17,7 @@ local moduleNameInstanceNumberString = tostring(moduleNameInstanceNumber) -- num
 -- e.g. local object = MachineLearning.DeepNeuralNetwork.create() -- Use any AppEngine CROWN needed
 
 -- Event to notify result of processing
-Script.serveEvent("CSK_ModuleName.OnNewResult" .. moduleNameInstanceNumberString, "ModuleName_OnNewResult" .. moduleNameInstanceNumberString, 'bool') -- Edit this accordingly
+Script.serveEvent("CSK_ModuleName.OnNewResult" .. moduleNameInstanceNumberString, "ModuleName_OnNewResult" .. moduleNameInstanceNumberString, 'auto') -- Edit this accordingly
 -- Event to forward content from this thread to Controller to show e.g. on UI
 Script.serveEvent("CSK_ModuleName.OnNewValueToForward".. moduleNameInstanceNumberString, "ModuleName_OnNewValueToForward" .. moduleNameInstanceNumberString, 'string, auto')
 -- Event to forward update of e.g. parameter update to keep data in sync between threads
@@ -43,15 +43,15 @@ end
 setAllProcessingParameters(scriptParams)
 ]]
 
-local function handleOnNewProcessing(object)
+local function handleOnNewProcessing(data)
 
-  _G.logger:info(nameOfModule .. ": Check object on instance No." .. moduleNameInstanceNumberString)
+  _G.logger:fine(nameOfModule .. ": Check data on instance No." .. moduleNameInstanceNumberString)
 
   -- Insert processing part
   -- E.g.
   --[[
 
-  local result = someProcessingFunctions(object)
+  local result = someProcessingFunctions(data)
 
   Script.notifyEvent("ModuleName_OnNewValueUpdate" .. moduleNameInstanceNumberString, moduleNameInstanceNumber, 'valueName', result, processingParams.selectedObject)
 
@@ -61,15 +61,22 @@ local function handleOnNewProcessing(object)
   end
   ]]
 
-  --_G.logger:info(nameOfModule .. ": Processing on ModuleName" .. moduleNameInstanceNumberString .. " was = " .. tostring(result))
-  --Script.notifyEvent('ModuleName_OnNewResult'.. moduleNameInstanceNumberString, true)
+  --_G.logger:fine(nameOfModule .. ": Processing on ModuleName" .. moduleNameInstanceNumberString .. " was = " .. tostring(result))
+  Script.notifyEvent('ModuleName_OnNewResult'.. moduleNameInstanceNumberString, data)
 
-  --Script.notifyEvent("ModuleName_OnNewValueToForward" .. moduleNameInstanceNumberString, 'MultiColorSelection_CustomEventName', 'content')
+  --Script.notifyEvent("ModuleName_OnNewValueToForward" .. moduleNameInstanceNumberString, 'ModuleName_CustomEventName', 'content')
 
-  Script.releaseObject(object)
+  --Script.releaseObject(data)
 
 end
-Script.serveFunction("CSK_ModuleName.processInstance"..moduleNameInstanceNumberString, handleOnNewProcessing, 'object:?:Alias', 'bool:?') -- Edit this according to this function
+Script.serveFunction("CSK_ModuleName.processInstance"..moduleNameInstanceNumberString, handleOnNewProcessing, 'auto', 'auto:?') -- Edit this according to this function
+
+--- Function to deregister from event
+local function deregisterFromEvent()
+  _G.logger:fine(nameOfModule .. ": Deregister instance " .. moduleNameInstanceNumberString .. " from event.")
+  Script.deregister(processingParams.registeredEvent, handleOnNewProcessing)
+  processingParams.registeredEvent = ''
+end
 
 --- Function to handle updates of processing parameters from Controller
 ---@param moduleNameNo int Number of instance to update
@@ -79,11 +86,11 @@ Script.serveFunction("CSK_ModuleName.processInstance"..moduleNameInstanceNumberS
 local function handleOnNewProcessingParameter(moduleNameNo, parameter, value, internalObjectNo)
 
   if moduleNameNo == moduleNameInstanceNumber then -- set parameter only in selected script
-    _G.logger:info(nameOfModule .. ": Update parameter '" .. parameter .. "' of moduleNameInstanceNo." .. tostring(moduleNameNo) .. " to value = " .. tostring(value))
+    _G.logger:fine(nameOfModule .. ": Update parameter '" .. parameter .. "' of moduleNameInstanceNo." .. tostring(moduleNameNo) .. " to value = " .. tostring(value))
 
     --[[
     if internalObjectNo then
-      _G.logger:info(nameOfModule .. ": Update parameter '" .. parameter .. "' of moduleNameInstanceNo." .. tostring(moduleNameNo) .. " of internalObject No." .. tostring(internalObjectNo) .. " to value = " .. tostring(value))
+      _G.logger:fine(nameOfModule .. ": Update parameter '" .. parameter .. "' of moduleNameInstanceNo." .. tostring(moduleNameNo) .. " of internalObject No." .. tostring(internalObjectNo) .. " to value = " .. tostring(value))
       processingParams.internalObjects[internalObjectNo][parameter] = value
 
     elseif parameter == 'FullSetup' then
@@ -101,7 +108,7 @@ local function handleOnNewProcessingParameter(moduleNameNo, parameter, value, in
     ]]
 
     if parameter == 'registeredEvent' then
-      _G.logger:info(nameOfModule .. ": Register instance " .. moduleNameInstanceNumberString .. " on event " .. value)
+      _G.logger:fine(nameOfModule .. ": Register instance " .. moduleNameInstanceNumberString .. " on event " .. value)
       if processingParams.registeredEvent ~= '' then
         Script.deregister(processingParams.registeredEvent, handleOnNewProcessing)
       end
@@ -112,6 +119,9 @@ local function handleOnNewProcessingParameter(moduleNameNo, parameter, value, in
     --   --Setting something special...
     --   processingParams.specificVariable = value
     --   --Do some more specific...
+
+    elseif parameter == 'deregisterFromEvent' then
+      deregisterFromEvent()
 
     else
       processingParams[parameter] = value

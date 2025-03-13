@@ -13,11 +13,21 @@ local nameOfModule = 'CSK_ModuleName'
 local moduleName = {}
 moduleName.__index = moduleName
 
+moduleName.styleForUI = 'None' -- Optional parameter to set UI style
+moduleName.version = Engine.getCurrentAppVersion() -- Version of module
+
 --**************************************************************************
 --********************** End Global Scope **********************************
 --**************************************************************************
 --**********************Start Function Scope *******************************
 --**************************************************************************
+
+--- Function to react on UI style change
+local function handleOnStyleChanged(theme)
+  moduleName.styleForUI = theme
+  Script.notifyEvent("ModuleName_OnNewStatusCSKStyle", moduleName.styleForUI)
+end
+Script.register('CSK_PersistentData.OnNewStatusCSKStyle', handleOnStyleChanged)
 
 --- Function to create new instance
 ---@param moduleNameInstanceNo int Number of instance
@@ -58,6 +68,7 @@ function moduleName.create(moduleNameInstanceNo)
 
   -- Parameters to be saved permanently if wanted
   self.parameters = {}
+  self.parameters.flowConfigPriority = CSK_FlowConfig ~= nil or false -- Status if FlowConfig should have priority for FlowConfig relevant configurations
   self.parameters.registeredEvent = '' -- If thread internal function should react on external event, define it here, e.g. 'CSK_OtherModule.OnNewInput'
   self.parameters.processingFile = 'CSK_ModuleName_Processing' -- which file to use for processing (will be started in own thread)
   --self.parameters.showImage = true -- Short docu of variable

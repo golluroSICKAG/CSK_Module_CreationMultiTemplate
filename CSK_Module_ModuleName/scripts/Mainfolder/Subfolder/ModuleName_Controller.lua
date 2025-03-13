@@ -39,6 +39,12 @@ Script.serveEvent("CSK_ModuleName.OnNewValueUpdateNUM", "ModuleName_OnNewValueUp
 -- Script.serveEvent("CSK_ModuleName.OnNewEvent", "ModuleName_OnNewEvent")
 Script.serveEvent('CSK_ModuleName.OnNewResult', 'ModuleName_OnNewResult')
 
+Script.serveEvent('CSK_ModuleName.OnNewStatusModuleVersion', 'ModuleName_OnNewStatusModuleVersion')
+Script.serveEvent('CSK_ModuleName.OnNewStatusCSKStyle', 'ModuleName_OnNewStatusCSKStyle')
+Script.serveEvent('CSK_ModuleName.OnNewStatusModuleIsActive', 'ModuleName_OnNewStatusModuleIsActive')
+
+Script.serveEvent('CSK_ModuleName.OnNewStatusRegisteredEvent', 'ModuleName_OnNewStatusRegisteredEvent')
+
 Script.serveEvent("CSK_ModuleName.OnNewStatusLoadParameterOnReboot", "ModuleName_OnNewStatusLoadParameterOnReboot")
 Script.serveEvent("CSK_ModuleName.OnPersistentDataModuleAvailable", "ModuleName_OnPersistentDataModuleAvailable")
 Script.serveEvent("CSK_ModuleName.OnNewParameterName", "ModuleName_OnNewParameterName")
@@ -48,6 +54,7 @@ Script.serveEvent("CSK_ModuleName.OnNewProcessingParameter", "ModuleName_OnNewPr
 Script.serveEvent("CSK_ModuleName.OnNewSelectedInstance", "ModuleName_OnNewSelectedInstance")
 Script.serveEvent("CSK_ModuleName.OnDataLoadedOnReboot", "ModuleName_OnDataLoadedOnReboot")
 
+Script.serveEvent('CSK_ModuleName.OnNewStatusFlowConfigPriority', 'ModuleName_OnNewStatusFlowConfigPriority')
 Script.serveEvent("CSK_ModuleName.OnUserLevelOperatorActive", "ModuleName_OnUserLevelOperatorActive")
 Script.serveEvent("CSK_ModuleName.OnUserLevelMaintenanceActive", "ModuleName_OnUserLevelMaintenanceActive")
 Script.serveEvent("CSK_ModuleName.OnUserLevelServiceActive", "ModuleName_OnUserLevelServiceActive")
@@ -165,15 +172,24 @@ end
 local function handleOnExpiredTmrModuleName()
   -- Script.notifyEvent("ModuleName_OnNewEvent", false)
 
-  updateUserLevel()
+  Script.notifyEvent("ModuleName_OnNewStatusModuleVersion", 'v' .. moduleName_Model.version)
+  Script.notifyEvent("ModuleName_OnNewStatusCSKStyle", moduleName_Model.styleForUI)
+  Script.notifyEvent("ModuleName_OnNewStatusModuleIsActive", _G.availableAPIs.default and _G.availableAPIs.specific)
 
-  Script.notifyEvent('ModuleName_OnNewSelectedInstance', selectedInstance)
-  Script.notifyEvent("ModuleName_OnNewInstanceList", helperFuncs.createStringListBySize(#moduleName_Instances))
+  if _G.availableAPIs.default and _G.availableAPIs.specific then
 
-  Script.notifyEvent("ModuleName_OnNewStatusLoadParameterOnReboot", moduleName_Instances[selectedInstance].parameterLoadOnReboot)
-  Script.notifyEvent("ModuleName_OnPersistentDataModuleAvailable", moduleName_Instances[selectedInstance].persistentModuleAvailable)
-  Script.notifyEvent("ModuleName_OnNewParameterName", moduleName_Instances[selectedInstance].parametersName)
+    updateUserLevel()
 
+    Script.notifyEvent('ModuleName_OnNewSelectedInstance', selectedInstance)
+    Script.notifyEvent("ModuleName_OnNewInstanceList", helperFuncs.createStringListBySize(#moduleName_Instances))
+
+    Script.notifyEvent("ModuleName_OnNewStatusRegisteredEvent", moduleName_Instances[selectedInstance].parameters.registeredEvent)
+
+    Script.notifyEvent("ModuleName_OnNewStatusFlowConfigPriority", moduleName_Instances[selectedInstance].parameters.flowConfigPriority)
+    Script.notifyEvent("ModuleName_OnNewStatusLoadParameterOnReboot", moduleName_Instances[selectedInstance].parameterLoadOnReboot)
+    Script.notifyEvent("ModuleName_OnPersistentDataModuleAvailable", moduleName_Instances[selectedInstance].persistentModuleAvailable)
+    Script.notifyEvent("ModuleName_OnNewParameterName", moduleName_Instances[selectedInstance].parametersName)
+  end
   -- ...
 end
 Timer.register(tmrModuleName, "OnExpired", handleOnExpiredTmrModuleName)
@@ -181,28 +197,38 @@ Timer.register(tmrModuleName, "OnExpired", handleOnExpiredTmrModuleName)
 -- ********************* UI Setting / Submit Functions Start ********************
 
 local function pageCalled()
-  updateUserLevel() -- try to hide user specific content asap
+  if _G.availableAPIs.default and _G.availableAPIs.specific then
+    updateUserLevel() -- try to hide user specific content asap
+  end
   tmrModuleName:start()
   return ''
 end
 Script.serveFunction("CSK_ModuleName.pageCalled", pageCalled)
 
 local function setSelectedInstance(instance)
-  selectedInstance = instance
-  _G.logger:info(nameOfModule .. ": New selected instance = " .. tostring(selectedInstance))
-  moduleName_Instances[selectedInstance].activeInUI = true
-  Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'activeInUI', true)
-  tmrModuleName:start()
+  if #moduleName_Instances >= instance then
+    selectedInstance = instance
+    _G.logger:fine(nameOfModule .. ": New selected instance = " .. tostring(selectedInstance))
+    moduleName_Instances[selectedInstance].activeInUI = true
+    Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'activeInUI', true)
+    tmrModuleName:start()
+  else
+    _G.logger:warning(nameOfModule .. ": Selected instance does not exist.")
+  end
 end
 Script.serveFunction("CSK_ModuleName.setSelectedInstance", setSelectedInstance)
 
 local function getInstancesAmount ()
-  return #moduleName_Instances
+  if multiSerialCom_Instances then
+    return #moduleName_Instances
+  else
+    return 0
+  end
 end
 Script.serveFunction("CSK_ModuleName.getInstancesAmount", getInstancesAmount)
 
 local function addInstance()
-  _G.logger:info(nameOfModule .. ": Add instance")
+  _G.logger:fine(nameOfModule .. ": Add instance")
   table.insert(moduleName_Instances, moduleName_Model.create(#moduleName_Instances+1))
   Script.deregister("CSK_ModuleName.OnNewValueToForward" .. tostring(#moduleName_Instances) , handleOnNewValueToForward)
   Script.register("CSK_ModuleName.OnNewValueToForward" .. tostring(#moduleName_Instances) , handleOnNewValueToForward)
@@ -231,7 +257,11 @@ Script.serveFunction("CSK_ModuleName.setRegisterEvent", setRegisterEvent)
 
 --- Function to share process relevant configuration with processing threads
 local function updateProcessingParameters()
-  Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'value', moduleName_Instances[selectedInstance].parameters.value)
+  Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'activeInUI', true)
+
+  Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'registeredEvent', moduleName_Instances[selectedInstance].parameters.registeredEvent)
+
+  --Script.notifyEvent('ModuleName_OnNewProcessingParameter', selectedInstance, 'value', moduleName_Instances[selectedInstance].parameters.value)
 
   -- optionally for internal objects...
   --[[
@@ -243,17 +273,40 @@ local function updateProcessingParameters()
 
 end
 
+local function getStatusModuleActive()
+  return _G.availableAPIs.default and _G.availableAPIs.specific
+end
+Script.serveFunction('CSK_ModuleName.getStatusModuleActive', getStatusModuleActive)
+
+local function clearFlowConfigRelevantConfiguration()
+  for i = 1, #moduleName_Instances do
+    moduleName_Instances[i].parameters.registeredEvent = ''
+    Script.notifyEvent('ModuleName_OnNewProcessingParameter', i, 'deregisterFromEvent', '')
+    Script.notifyEvent('ModuleName_OnNewStatusRegisteredEvent', '')
+  end
+end
+Script.serveFunction('CSK_ModuleName.clearFlowConfigRelevantConfiguration', clearFlowConfigRelevantConfiguration)
+
+local function getParameters(instanceNo)
+  if instanceNo <= #moduleName_Instances then
+    return helperFuncs.json.encode(moduleName_Instances[instanceNo].parameters)
+  else
+    return ''
+  end
+end
+Script.serveFunction('CSK_ModuleName.getParameters', getParameters)
+
 -- *****************************************************************
 -- Following function can be adapted for CSK_PersistentData module usage
 -- *****************************************************************
 
 local function setParameterName(name)
-  _G.logger:info(nameOfModule .. ": Set parameter name = " .. tostring(name))
+  _G.logger:fine(nameOfModule .. ": Set parameter name = " .. tostring(name))
   moduleName_Instances[selectedInstance].parametersName = name
 end
 Script.serveFunction("CSK_ModuleName.setParameterName", setParameterName)
 
-local function sendParameters()
+local function sendParameters(noDataSave)
   if moduleName_Instances[selectedInstance].persistentModuleAvailable then
     CSK_PersistentData.addParameter(helperFuncs.convertTable2Container(moduleName_Instances[selectedInstance].parameters), moduleName_Instances[selectedInstance].parametersName)
 
@@ -263,8 +316,10 @@ local function sendParameters()
     else
       CSK_PersistentData.setModuleParameterName(nameOfModule, moduleName_Instances[selectedInstance].parametersName, moduleName_Instances[selectedInstance].parameterLoadOnReboot, tostring(selectedInstance))
     end
-    _G.logger:info(nameOfModule .. ": Send ModuleName parameters with name '" .. moduleName_Instances[selectedInstance].parametersName .. "' to CSK_PersistentData module.")
-    CSK_PersistentData.saveData()
+    _G.logger:fine(nameOfModule .. ": Send ModuleName parameters with name '" .. moduleName_Instances[selectedInstance].parametersName .. "' to CSK_PersistentData module.")
+    if not noDataSave then
+      CSK_PersistentData.saveData()
+    end
   else
     _G.logger:warning(nameOfModule .. ": CSK_PersistentData module not available.")
   end
@@ -279,66 +334,99 @@ local function loadParameters()
       moduleName_Instances[selectedInstance].parameters = helperFuncs.convertContainer2Table(data)
 
       -- If something needs to be configured/activated with new loaded data
-      updateProcessingParameters()
-      CSK_ModuleName.pageCalled()
+      --updateProcessingParameters()
+
+      tmrModuleName:start()
+      return true
     else
       _G.logger:warning(nameOfModule .. ": Loading parameters from CSK_PersistentData module did not work.")
+      tmrModuleName:start()
+      return false
     end
   else
     _G.logger:warning(nameOfModule .. ": CSK_PersistentData module not available.")
+    tmrModuleName:start()
+    return false
   end
-  tmrModuleName:start()
 end
 Script.serveFunction("CSK_ModuleName.loadParameters", loadParameters)
 
 local function setLoadOnReboot(status)
   moduleName_Instances[selectedInstance].parameterLoadOnReboot = status
-  _G.logger:info(nameOfModule .. ": Set new status to load setting on reboot: " .. tostring(status))
+  _G.logger:fine(nameOfModule .. ": Set new status to load setting on reboot: " .. tostring(status))
+  Script.notifyEvent("ModuleName_OnNewStatusLoadParameterOnReboot", status)
 end
 Script.serveFunction("CSK_ModuleName.setLoadOnReboot", setLoadOnReboot)
+
+local function setFlowConfigPriority(status)
+  moduleName_Instances[selectedInstance].parameters.flowConfigPriority = status
+  _G.logger:fine(nameOfModule .. ": Set new status of FlowConfig priority: " .. tostring(status))
+  Script.notifyEvent("ModuleName_OnNewStatusFlowConfigPriority", moduleName_Instances[selectedInstance].parameters.flowConfigPriority)
+end
+Script.serveFunction('CSK_ModuleName.setFlowConfigPriority', setFlowConfigPriority)
 
 --- Function to react on initial load of persistent parameters
 local function handleOnInitialDataLoaded()
 
-  _G.logger:info(nameOfModule .. ': Try to initially load parameter from CSK_PersistentData module.')
-  if string.sub(CSK_PersistentData.getVersion(), 1, 1) == '1' then
+  if _G.availableAPIs.default and _G.availableAPIs.specific then
 
-    _G.logger:warning(nameOfModule .. ': CSK_PersistentData module is too old and will not work. Please update CSK_PersistentData module.')
+    _G.logger:fine(nameOfModule .. ': Try to initially load parameter from CSK_PersistentData module.')
+    if string.sub(CSK_PersistentData.getVersion(), 1, 1) == '1' then
 
-    for j = 1, #moduleName_Instances do
-      moduleName_Instances[j].persistentModuleAvailable = false
-    end
-  else
-    -- Check if CSK_PersistentData version is >= 3.0.0
-    if tonumber(string.sub(CSK_PersistentData.getVersion(), 1, 1)) >= 3 then
-      local parameterName, loadOnReboot, totalInstances = CSK_PersistentData.getModuleParameterName(nameOfModule, '1')
-      -- Check for amount if instances to create
-      if totalInstances then
-        local c = 2
-        while c <= totalInstances do
-          addInstance()
-          c = c+1
+      _G.logger:warning(nameOfModule .. ': CSK_PersistentData module is too old and will not work. Please update CSK_PersistentData module.')
+
+      for j = 1, #moduleName_Instances do
+        moduleName_Instances[j].persistentModuleAvailable = false
+      end
+    else
+      -- Check if CSK_PersistentData version is >= 3.0.0
+      if tonumber(string.sub(CSK_PersistentData.getVersion(), 1, 1)) >= 3 then
+        local parameterName, loadOnReboot, totalInstances = CSK_PersistentData.getModuleParameterName(nameOfModule, '1')
+        -- Check for amount if instances to create
+        if totalInstances then
+          local c = 2
+          while c <= totalInstances do
+            addInstance()
+            c = c+1
+          end
         end
       end
-    end
 
-    for i = 1, #moduleName_Instances do
-      local parameterName, loadOnReboot = CSK_PersistentData.getModuleParameterName(nameOfModule, tostring(i))
-
-      if parameterName then
-        moduleName_Instances[i].parametersName = parameterName
-        moduleName_Instances[i].parameterLoadOnReboot = loadOnReboot
+      if not moduleName_Instances then
+        return
       end
 
-      if moduleName_Instances[i].parameterLoadOnReboot then
-        setSelectedInstance(i)
-        loadParameters()
+      for i = 1, #moduleName_Instances do
+        local parameterName, loadOnReboot = CSK_PersistentData.getModuleParameterName(nameOfModule, tostring(i))
+
+        if parameterName then
+          moduleName_Instances[i].parametersName = parameterName
+          moduleName_Instances[i].parameterLoadOnReboot = loadOnReboot
+        end
+
+        if moduleName_Instances[i].parameterLoadOnReboot then
+          setSelectedInstance(i)
+          loadParameters()
+        end
       end
+      Script.notifyEvent('ModuleName_OnDataLoadedOnReboot')
     end
-    Script.notifyEvent('ModuleName_OnDataLoadedOnReboot')
   end
 end
 Script.register("CSK_PersistentData.OnInitialDataLoaded", handleOnInitialDataLoaded)
+
+local function resetModule()
+  if _G.availableAPIs.default and _G.availableAPIs.specific then
+    clearFlowConfigRelevantConfiguration()
+    pageCalled()
+  end
+end
+Script.serveFunction('CSK_ModuleName.resetModule', resetModule)
+Script.register("CSK_PersistentData.OnResetAllModules", resetModule)
+
+-- *************************************************
+-- END of functions for CSK_PersistentData module usage
+-- *************************************************
 
 return funcs
 

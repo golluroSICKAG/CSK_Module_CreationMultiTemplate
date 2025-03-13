@@ -128,17 +128,21 @@ funcs.createJsonList = createJsonList
 ---@param content string[] Table with data entries
 ---@return string list String list
 local function createStringListBySimpleTable(content)
-  local list = "["
-  if #content >= 1 then
-    list = list .. '"' .. content[1] .. '"'
-  end
-  if #content >= 2 then
-    for i=2, #content do
-      list = list .. ', ' .. '"' .. content[i] .. '"'
+  if content then
+    local list = "["
+    if #content >= 1 then
+      list = list .. '"' .. content[1] .. '"'
     end
+    if #content >= 2 then
+      for i=2, #content do
+        list = list .. ', ' .. '"' .. content[i] .. '"'
+      end
+    end
+    list = list .. "]"
+    return list
+  else
+    return ''
   end
-  list = list .. "]"
-  return list
 end
 funcs.createStringListBySimpleTable = createStringListBySimpleTable
 
